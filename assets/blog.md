@@ -1,3 +1,11 @@
+---
+title: "Teaching a Parser to Learn from Its Mistakes"
+description: "How we added learned quality scoring and guided backtracking to any ANTLR4 grammar — without touching a single grammar rule."
+pubDate: 2026-03-07
+author: "locchh"
+tags: ["antlr4", "parsing", "machine-learning", "nlp", "open-source"]
+---
+
 # Teaching a Parser to Learn from Its Mistakes
 
 Parsers are deterministic. Given the same input, they always make the same decisions — and when a grammar is ambiguous, they always pick the same alternative, right or wrong. What if we could teach a parser to *prefer* better alternatives, or at least recover from bad ones?
