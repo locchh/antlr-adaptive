@@ -1,0 +1,21 @@
+[project]
+name = "antlr-adaptive"
+version = "0.1.0"
+description = "Learned parse-quality scoring and guided backtracking for any ANTLR4 grammar"
+requires-python = ">=3.12"
+dependencies = [
+    "antlr4-python3-runtime>=4.13.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
