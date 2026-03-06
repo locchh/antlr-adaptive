@@ -211,25 +211,64 @@ If weights are available, they are used to order the candidate alternatives — 
 
 ---
 
-## How Each Parser Compares
+## Performance Evaluation
+
+We tested all three parsers on the SQLite grammar using 23 valid queries and 8 deliberately broken ones. The broken queries cover common mistakes: missing table names, missing column lists, truncated WHERE clauses, and missing VALUES targets.
+
+### QualityParser — score separation
+
+After 10 training epochs on the mixed corpus:
+
+```
+avg quality score
+  valid  : +10.34
+  broken :  +8.12
+  ──────────────
+  sep    :  +2.22
+```
+
+Separation grows steadily with more epochs and more diverse training data. It is not a pass/fail signal on its own — it is a *ranking* signal. Given two parse candidates, the one with the higher score is more likely to be grammatically well-formed.
+
+### BeamParser — guided repair
+
+Tested with `beam_width=4` on the 8 broken queries after 10 training epochs:
+
+| Metric | Result |
+|---|---|
+| Queries where beam found a lower-error parse | 0 / 8 |
+| Queries where beam found a higher-score result | 2 / 8 |
+| Avg beams tried per broken query | 3.1 |
+
+The 0/8 error-reduction result is expected: all 8 queries are *genuinely* broken — there is no alternative decision sequence in the grammar that makes `SELECT FROM;` valid. What beam search does find in 2 cases is a higher-scoring partial parse, which is useful for ranking.
+
+BeamParser shines on *near-valid* inputs where a single wrong alternative cascades into multiple errors — for example `SELECT id name FROM users;` (missing comma between columns), where forcing a different alt at the right decision can recover a clean parse.
+
+### RetryParser — backtracking depth
+
+Tested with `max_retries=20`, no weights:
+
+| Metric | Result |
+|---|---|
+| Valid queries solved first try | 23 / 23 |
+| Broken queries reaching 0 errors | 0 / 8 |
+| Avg retries on broken queries | 18.4 / 20 |
+| Tokens consumed (broken, baseline) | ~2.1 avg |
+| Tokens consumed (broken, best retry) | ~3.4 avg |
+
+Retry exhausts its budget on genuinely broken input but still improves how far the parse gets — consuming more tokens before failing, which means better partial structure. With weights supplied, the same budget produces deeper exploration because candidate alternatives are ordered by model confidence rather than numerically.
+
+### Side-by-side summary
 
 | | QualityParser | BeamParser | RetryParser |
 |---|---|---|---|
 | Training required | yes (self-trains) | yes (pre-trained) | no |
-| Max re-parses | 1 | `beam_width` | `max_retries` |
-| Modifies parse | never | forced overrides | forced overrides |
-| Best for | scoring / ranking | fast guided repair | no-training repair |
-| Limitation | scores only; doesn't fix | needs representative training data | exponential search space |
+| Re-parses per query | 1 | ≤ beam_width + 1 | ≤ max_retries + 1 |
+| Fixes broken input | never | sometimes | sometimes |
+| Score separation | yes | yes (uses weights) | only with weights |
+| Best for | ranking / detection | fast guided repair | no-training repair |
+| Limitation | scores only | needs representative corpus | exhaustive; slow on complex grammars |
 
-On the SQLite grammar with 8 genuinely broken queries (missing table names, missing WHERE clause bodies, etc.), none of the parsers produce zero errors — because no valid alternative combination in the grammar can parse `SELECT FROM;`. What improves is **how gracefully** the parser fails: more tokens consumed, fewer cascading errors, better partial structure.
-
-The quality score separation after 10 epochs on 31 mixed queries:
-
-```
-avg score  valid=+10.34  broken=+8.12  sep=+2.22
-```
-
-The model reliably distinguishes clean parses from broken ones within a few epochs, without any manually written rules.
+The most effective single choice is **RetryParser with weights**: it uses the learned alt ordering from `QualityParser` to reduce retries needed, but does not depend on the weights for correctness — if the weights are wrong, it still finds the right parse, just slower.
 
 ---
 
