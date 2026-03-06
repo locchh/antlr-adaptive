@@ -1,7 +1,7 @@
 ---
 title: "Teaching a Parser to Learn from Its Mistakes"
 description: "How we added learned quality scoring and guided backtracking to any ANTLR4 grammar — without touching a single grammar rule."
-pubDate: 2026-03-07
+pubDate: "2026-03-07"
 author: "locchh"
 tags: ["antlr4", "parsing", "machine-learning", "nlp", "open-source"]
 ---
