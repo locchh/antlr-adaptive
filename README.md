@@ -87,3 +87,9 @@ qp = QualityParser(MyLexer, MyParser, start_rule="compilationUnit")
 ```
 
 Tune `N_DECISIONS` in `antlr_adaptive/_features.py` to cover your grammar's decision count (`len(parser.atn.decisionToState)`).
+
+## Related to
+
+[ANTLR (ANother Tool for Language Recognition)](https://github.com/antlr/antlr4)
+
+[Grammars written for ANTLR v4](https://github.com/antlr/grammars-v4)
