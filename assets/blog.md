@@ -57,6 +57,40 @@ The key insight: **we never override the parser during a parse**. Overriding `ad
 
 ### QualityParser — learn by watching
 
+```
+ input text
+     │
+     ▼
+ ┌─────────────────────────────────────────┐
+ │  ANTLR parse  (ObservingATNSimulator)   │
+ │                                         │
+ │  adaptivePredict called N times         │
+ │  → always returns ANTLR's choice        │
+ │  → records (decision, alt, features)    │
+ └───────────────────┬─────────────────────┘
+                     │ trace
+                     ▼
+             ┌───────────────┐
+             │  any errors?  │
+             └───┬───────────┘
+          yes │         │ no
+              ▼         ▼
+         reward =    reward = +1.0
+      -errors/tokens
+              │         │
+              └────┬────┘
+                   ▼
+         ┌──────────────────┐
+         │  WeightStore     │
+         │  update weights  │  w += lr * reward * features
+         │  (perceptron)    │
+         └──────────────────┘
+                   │
+                   ▼
+            quality score
+         (mean w·f over trace)
+```
+
 `QualityParser` subclasses ANTLR's simulator with an `ObservingATNSimulator` that records every `(decision, alt, features)` tuple without changing the result. After each parse it updates the weight store with the perceptron rule.
 
 After training, it can assign a **quality score** to any parse: the mean `weight[decision][alt] · features` over all decisions in the trace. Valid inputs consistently score higher than broken ones.
@@ -76,6 +110,34 @@ This is useful for **ranking multiple parse candidates**, detecting suspicious i
 
 ### BeamParser — model-guided re-parse
 
+```
+ input text
+     │
+     ▼
+ ┌──────────────────┐
+ │  baseline parse  │──── trace ────► scan decisions:
+ └──────────────────┘                 model prefers alt X
+         │ errors?                    over ANTLR's alt Y?
+         │ no → return                       │
+         │ yes                               ▼
+         │                    ┌──────────────────────────┐
+         │                    │  top-K suspect decisions  │
+         │                    │  sorted by margin score   │
+         │                    └────────────┬─────────────┘
+         │                                 │
+         │              ┌──────────────────┼──────────────────┐
+         │              ▼                  ▼                  ▼
+         │         beam 1             beam 2   ...       beam K
+         │    force dec=D alt=X   force dec=E alt=X
+         │         │                    │
+         └─────────┴────────────────────┘
+                         │ all results
+                         ▼
+                 ┌───────────────┐
+                 │  pick best    │  fewest errors → highest score
+                 └───────────────┘
+```
+
 Once the weight store is trained, `BeamParser` uses it to *actively improve* parse results on broken inputs.
 
 Algorithm:
@@ -93,6 +155,42 @@ result = bp.parse("SELECT id name FROM users;")
 `BeamParser` is fast (at most `beam_width + 1` parses) and targets the decisions the model is *most confident about*. It works best when the training corpus is representative of the input distribution.
 
 ### RetryParser — exhaustive backtracking without training
+
+```
+ input text
+     │
+     ▼
+ ┌──────────────────┐
+ │  baseline parse  │──── trace ──► frontier = baseline
+ └──────────────────┘
+         │ errors?
+         │ no → return
+         │ yes
+         ▼
+ ┌─────────────────────────────────────────────────┐
+ │  scan frontier trace from the END               │
+ │                                                 │
+ │  dec[N]  dec[N-1]  ...  dec[1]  dec[0]         │
+ │    ▲                                            │
+ │    └── find first decision with untried alt     │
+ └───────────────────┬─────────────────────────────┘
+                     │ override = {dec: next_alt}
+                     ▼
+             ┌───────────────┐
+             │  re-parse     │
+             └───────┬───────┘
+                     │
+          ┌──────────┴──────────┐
+          ▼                     ▼
+   is_better_than(best)?   tokens >= frontier?
+     → update best            → advance frontier
+          │                     │
+          └──────────┬──────────┘
+                     │
+             clean? → return
+             max_retries? → return best
+             else → repeat
+```
 
 `RetryParser` does not need a weight store at all. It treats the parse trace as a search space and backtracks through it:
 
